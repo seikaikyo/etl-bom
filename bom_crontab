@@ -1,0 +1,11 @@
+# BOM ETL 排程設定
+# 請將此內容加入到 crontab 中 (使用 crontab -e 命令編輯)
+
+# 每日凌晨 01:00 執行增量 BOM ETL (前一天異動)
+0 1 * * * /home/ETL/etl/bom_scheduler.sh daily >> /home/ETL/logs/bom/cron_daily.log 2>&1
+
+# 每月 1 號凌晨 02:00 執行完整 BOM ETL (全部資料)
+0 2 1 * * /home/ETL/etl/bom_scheduler.sh monthly >> /home/ETL/logs/bom/cron_monthly.log 2>&1
+
+# 每週日凌晨 03:00 清理超過 90 天的舊資料 (可選)
+# 0 3 * * 0 /home/ETL/etl/bom_cleanup.sh >> /home/ETL/logs/bom/cron_cleanup.log 2>&1

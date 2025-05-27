@@ -1,0 +1,63 @@
+stages:
+  - test
+  - deploy
+  - schedule
+
+variables:
+  DEPLOY_PATH: "/home/ETL/etl-bom"
+  PYTHON_VERSION: "3.9"
+
+# 測試階段
+test_bom_etl:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  script:
+    - pip install -r requirements.txt
+    - python -m py_compile bom_etl.py
+    - echo "BOM ETL 語法檢查完成"
+  only:
+    - merge_requests
+    - main
+
+# 部署到生產環境
+deploy_bom_etl:
+  stage: deploy
+  script:
+    - echo "部署 BOM ETL 到生產環境..."
+    - mkdir -p ${DEPLOY_PATH}
+    - cp bom_etl.py ${DEPLOY_PATH}/
+    - cp bom_scheduler.sh ${DEPLOY_PATH}/
+    - cp bom_cleanup.sh ${DEPLOY_PATH}/
+    - cp requirements.txt ${DEPLOY_PATH}/
+    - cp -r sql/ ${DEPLOY_PATH}/
+    - chmod +x ${DEPLOY_PATH}/bom_scheduler.sh
+    - chmod +x ${DEPLOY_PATH}/bom_cleanup.sh
+    - ln -sf /home/ETL/etl/db.json ${DEPLOY_PATH}/db.json  # 連結共用配置
+    - echo "BOM ETL 部署完成"
+  only:
+    - main
+  when: manual
+
+# 設定 Crontab (可選)
+setup_schedule:
+  stage: schedule
+  script:
+    - echo "設定 BOM ETL 排程..."
+    - |
+      # 檢查 crontab 中是否已存在 BOM ETL 排程
+      if ! crontab -l | grep -q "bom_scheduler.sh"; then
+        # 備份現有 crontab
+        crontab -l > /tmp/current_crontab
+        # 添加 BOM ETL 排程
+        echo "0 1 * * * ${DEPLOY_PATH}/bom_scheduler.sh daily >> /home/ETL/logs/bom/cron_daily.log 2>&1" >> /tmp/current_crontab
+        echo "0 2 1 * * ${DEPLOY_PATH}/bom_scheduler.sh monthly >> /home/ETL/logs/bom/cron_monthly.log 2>&1" >> /tmp/current_crontab
+        echo "0 3 * * 0 ${DEPLOY_PATH}/bom_cleanup.sh >> /home/ETL/logs/bom/cron_cleanup.log 2>&1" >> /tmp/current_crontab
+        # 更新 crontab
+        crontab /tmp/current_crontab
+        echo "BOM ETL 排程設定完成"
+      else
+        echo "BOM ETL 排程已存在，跳過設定"
+      fi
+  only:
+    - main
+  when: manual
